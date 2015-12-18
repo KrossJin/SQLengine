@@ -1,3 +1,4 @@
+//krossjin
 /******************************************************************************
 
   Copyright (C), 2001-2015, Huawei Tech. Co., Ltd.
@@ -31,25 +32,25 @@ static int repeat = 0;
 static int repeat_del = 0;
 static int row = 0;
 struct Table* list;
-/***********************************��ƹ��� ***********************************
-1��֧�ֵ��������ͣ�
-	integer : ���ͣ��з��� 4 �ֽ�������
-	text : �䳤�ַ�������ʵ�ֵ�ʱ���ڲ�����ֱ����char*��
-2��֧���﷨�� 
-	SQL�ؼ���(������������)�����ִ�Сд������/����/��ֵ ���ִ�Сд��
-    SQL�ؼ��ְ�����
+/***********************************设计规则 ***********************************
+1、支持的数据类型：
+	integer : 整型，有符号 4 字节整数；
+	text : 变长字符串；（实现的时候，内部可以直接用char*）
+2、支持语法： 
+	SQL关键字(包括数据类型)不区分大小写，表名/列名/列值 区分大小写；
+    SQL关键字包括：
 		CREATE TABLE/INTEGER/TEXT/DROP TABLE/INSERT INTO/VALUES/ORDER BY/
 		SELECT FROM WHERE/ORDER BY/DELETE FROM WHERE
-		SQL����е������ַ�������( ) ' ; = 
-3���﷨ϸ�ڣ�
-	������䷵�صĴ�����Ϣ����ο�.h�ļ�����
-	��������CREATE TABLE table_name (col1_name   integer,col2_name   text);�������Ϊ5,�кŴ�1��ʼ
-	ɾ������DROP TABLE table_name;
-	�����¼��INSERT INTO table_name VALUES (100, 'Bananas');�������ظ�
-	��ѯ��¼��SELECT * FROM table_name WHERE col1_name = 100;
+		SQL语句中的特殊字符包括：( ) ' ; = 
+3、语法细节：
+	关于语句返回的错误信息，请参考.h文件定义
+	创建表：CREATE TABLE table_name (col1_name   integer,col2_name   text);最大列数为5,列号从1开始
+	删除表：DROP TABLE table_name;
+	插入记录：INSERT INTO table_name VALUES (100, 'Bananas');允许有重复
+	查询记录：SELECT * FROM table_name WHERE col1_name = 100;
 			  SELECT * FROM table_name WHERE col2_name = 'Bananas' ORDER BY col1_name;
-				1��ORDER BY ����������
-				2����ǰSELECT�ؼ��ֺ󣬽�֧��*�������������У���˳���մ�����ʱ�����˳�򣩣�����Ҫ���Ƿ��ؾֲ��е����
+				1、ORDER BY 以升序排列
+				2、当前SELECT关键字后，仅支持*（即返回所有列，列顺序按照创建表时候的列顺序），不需要考虑返回局部列的情况
 *********************************************************************************/
 RecordSet select_execute(const char *sql);
 RecordSet create_execute(const char *sql);
@@ -63,19 +64,19 @@ void free_table(struct Table* in);
 void free_element(struct element* in);
 void free_column(struct column* in);
 
-//////////////////////////////// ��¼���ӿڶ��� ///////////////////////////////
+//////////////////////////////// 记录集接口定义 ///////////////////////////////
 
 /*****************************************
-*	����:	SQL���ִ�нӿ�
+*	功能:	SQL语句执行接口
 *    
-*	����:	const char *sql ��  SQL���
+*	输入:	const char *sql ：  SQL语句
 *    
-*	���:   �����
+*	输出:   无输出
 *     
-*	����:	SQL���ִ�к�Ľ������ֻ��SELECT��䷵�صĽ�������ܴ��ڶ���1�������
-*			CREATE TABLE/DROP TABLE/INSERT INTO ��䷵�صĽ����ֻ��һ����¼��
-*			��ӳ����ǰ����ִ�н�� ��
-*			��CREATE TABLEִ�гɹ��󷵻�CREATE TABLE SUCCESS��ʧ���򷵻�CREATE TABLE FAILED
+*	返回:	SQL语句执行后的结果集，只有SELECT语句返回的结果集可能存在多于1条的情况
+*			CREATE TABLE/DROP TABLE/INSERT INTO 语句返回的结果集只有一条记录，
+*			反映出当前语句的执行结果 。
+*			如CREATE TABLE执行成功后返回CREATE TABLE SUCCESS，失败则返回CREATE TABLE FAILED
 *****************************************/
 bool str_compare(const char* var1,const char* var2,int num){
 	while(num!=0 && *var1!=0 && *var2!=0){
@@ -151,11 +152,11 @@ RecordSet create_execute(const char *sql){
 	memcpy(result->result,"CREATE TABLE FAILED",20);
 	if(!str_compare_ignore_case("create",sql,6))return result;
 	sql = sql + 6;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	if(!str_compare_ignore_case("table",sql,5))return result;
 	sql = sql + 5;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 
 	temp = sub_str(sql," (",2);
@@ -165,15 +166,15 @@ RecordSet create_execute(const char *sql){
 	*(table->name+temp) = 0;
 	sql += temp;
 
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
-	sql++;//���� ����������ַ�
-	while(*sql == ' ')  //���ų��ո�
+	sql++;//跳过 ‘（’这个字符
+	while(*sql == ' ')  //先排除空格
 	    sql++;
-	table->col = (struct column*)malloc(sizeof(struct column)*5); //����5��column�ṹ��
-	table->col_size = 0;  //ʵ�ʵ�����
+	table->col = (struct column*)malloc(sizeof(struct column)*5); //申请5个column结构体
+	table->col_size = 0;  //实际的列数
 
-	//��һ��
+	//第一列
 	temp = sub_str(sql," ",1);
 	if(temp==-1){
 	    free_table(table);	
@@ -183,7 +184,7 @@ RecordSet create_execute(const char *sql){
 	memcpy(table->col[table->col_size].name, sql, temp);
 	*(table->col[table->col_size].name + temp) = 0;
 	sql += temp;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	if(*sql == 'i'){
 		if(!str_compare_ignore_case("integer",sql,7)){
@@ -203,12 +204,12 @@ RecordSet create_execute(const char *sql){
 		table->col[table->col_size].type = 1;
 		table->col_size++;
 	}
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	while(*sql ==','){
 		sql++;
-		//��n��
-		while(*sql == ' ')  //���ų��ո�
+		//第n列
+		while(*sql == ' ')  //先排除空格
 			 sql++;	
 		temp = sub_str(sql," ",1);
 		if(temp==-1){
@@ -220,7 +221,7 @@ RecordSet create_execute(const char *sql){
 		*(table->col[table->col_size].name + temp) = 0;
 		sql += temp;
 
-		while(*sql == ' ')  //���ų��ո�
+		while(*sql == ' ')  //先排除空格
 		  sql++;
 		if(*sql == 'i'){
 			if(!str_compare_ignore_case("integer",sql,7)){
@@ -240,7 +241,7 @@ RecordSet create_execute(const char *sql){
 			table->col[table->col_size].type = 1;
 			table->col_size++;
 		}
-		while(*sql == ' ')  //���ų��ո�
+		while(*sql == ' ')  //先排除空格
 			 sql++;	
 	}
 	if(*sql != ')'){
@@ -262,11 +263,11 @@ RecordSet drop_execute(const char *sql){
 	memcpy(result->result,"DROP TABLE FAILED",18);
 	if(!str_compare_ignore_case("drop",sql,4))return result;
 	sql = sql + 4;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	if(!str_compare_ignore_case("table",sql,5))return result;
 	sql = sql + 5;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	temp=0;
 	while(*(sql+temp)!=' ' && *(sql+temp)!=0 && *(sql+temp)!=';')temp++;
@@ -301,11 +302,11 @@ RecordSet insert_execute(const char *sql){
 	memcpy(result->result,"INSERT INTO FAILED",19);
 	if(!str_compare_ignore_case("insert",sql,6))return result;
 	sql = sql + 6;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	if(!str_compare_ignore_case("into",sql,4))return result;
 	sql = sql + 4;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	
     temp = sub_str(sql," ",1);
@@ -319,20 +320,20 @@ RecordSet insert_execute(const char *sql){
 	}
 	if(table == 0) return result;
 	sql += temp;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	if(!str_compare_ignore_case("values",sql,6))return result;
 	sql = sql + 6;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	if(*sql != '(')return result;
-	sql++; //���� ����������ַ�
+	sql++; //跳过 ‘（’这个字符
 
 	element = (struct element*)malloc(sizeof(struct element));
 	element->next = 0;
 	element->content = (int*)malloc(sizeof(int)*table->col_size);
 	for(i=0;i<table->col_size-1;i++){
-		while(*sql == ' ')  //���ų��ո�
+		while(*sql == ' ')  //先排除空格
 			sql++;
 		temp = sub_str(sql," ,",2);
 		if(temp==-1)return result;
@@ -346,15 +347,15 @@ RecordSet insert_execute(const char *sql){
 			element->content = 0;
 			sql += temp;
 		}
-		while(*sql == ' ')  //���ų��ո�
+		while(*sql == ' ')  //先排除空格
 			sql++;
 		if(*sql != ','){
 				free_element(element);
 				return result;
 		}
-		sql++; //��������
+		sql++; //跳过，号
 	}
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 		sql++;
 	temp = sub_str(sql," )",2);
 	if(temp==-1)return result;
@@ -378,13 +379,13 @@ RecordSet insert_execute(const char *sql){
 		*((char*)(element->content[i])+temp-1) = 0;
 		sql += temp;
 	}
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 		sql++;
 	if(*sql != ')'){
 		free_element(element);
 		return result;
 	}
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 		sql++;
 	if(*sql != ';'){
 		free_element(element);
@@ -411,11 +412,11 @@ RecordSet delete_execute(const char *sql){
 	memcpy(result->result,"DELETE FROM FAILED",19);
 	if(!str_compare_ignore_case("delete",sql,6))return result;
 	sql = sql + 6;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	if(!str_compare_ignore_case("from",sql,4))return result;
 	sql = sql + 4;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	
     temp = sub_str(sql," ",1);
@@ -429,11 +430,11 @@ RecordSet delete_execute(const char *sql){
 	}
 	if(table == 0) return result;
 	sql += temp;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	if(!str_compare_ignore_case("where",sql,5))return result;
 	sql = sql + 5;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 
 	temp = sub_str(sql," =",2);
@@ -445,11 +446,11 @@ RecordSet delete_execute(const char *sql){
 	}
 	if( i == table->col_size) return result;
 	sql += temp;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	if( *sql != '=') return result;
 	sql++;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 
 	temp=0;
@@ -511,7 +512,7 @@ RecordSet delete_execute(const char *sql){
 			}
 	}
 
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 	if(*sql != ';'){
 		if(column_content1 != 0)free(column_content1);
@@ -525,7 +526,7 @@ RecordSet delete_execute(const char *sql){
 RecordSet sql_execute(const char *sql)
 {
 	RecordSet result;
-	while(*sql == ' ')  //���ų��ո�
+	while(*sql == ' ')  //先排除空格
 	    sql++;
 
 	switch(*sql){
@@ -548,35 +549,35 @@ RecordSet sql_execute(const char *sql)
 
 
 /*****************************************
-*	����:	SQL���ִ�нӿ�
-			������ sql_execute �ӿ��Ѿ�˵���������ֻ�������������
-*			(1) CREATE TABLE/DROP TABLE/INSERT INTO ��䷵�صĽ����ֻ��һ����¼��
-*			ʹ�÷�ʽ���£�
+*	功能:	SQL语句执行接口
+			从上面 sql_execute 接口已经说明，结果集只有两种类情况：
+*			(1) CREATE TABLE/DROP TABLE/INSERT INTO 语句返回的结果集只有一条记录，
+*			使用方式如下：
 *			RecordSet rs = 
 *			sql_execute("CREATE TABLE table_select_multi ( id integer, name text );");
 *			Record rcd = get_record(rs, 0);
 *			char * rcd_s = record_to_string(rcd);
 *			int ret = strcmp(rcd_s, "CREATE TABLE SUCCESS");
 *
-*			(2) SELECT��䷵�صĽ�������ܴ��ڶ���1���������ʹ�÷�ʽ��
+*			(2) SELECT语句返回的结果集可能存在多于1条的情况，使用方式：
 *			RecordSet rs = sql_execute("SELECT * FROM table_select_multi ORDER BY id;");
-*			// ȡ��һ��
+*			// 取第一行
 *			Record rcd = get_record(rs, 0);
 *			char * rcd_s = record_to_string(rcd);
 *			ret = strcmp(rcd_s, "100, 'Bananas'");
 *			CPPUNIT_ASSERT(ret == 0);
-*			// ȡ�ڶ���
+*			// 取第二行
 *			rcd = get_record(rs, 1);
 *			rcd_s = record_to_string(rcd);
 *			ret = strcmp(rcd_s, "200, 'Apple'");
 *			CPPUNIT_ASSERT(ret == 0);
 *    
-*	����:	const RecordSet rs ��  �����
-*			int index ��           �кţ��кŴ�0��ʼ��
+*	输入:	const RecordSet rs ：  结果集
+*			int index ：           行号（行号从0开始）
 *    
-*	���:   �����
+*	输出:   无输出
 *     
-*	����:	�����rs�еĵ�index����¼
+*	返回:	结果集rs中的第index条记录
 *****************************************/
 
 Record get_record(const RecordSet rs, int index)
@@ -585,17 +586,17 @@ Record get_record(const RecordSet rs, int index)
 }
 
 /******************************************************************************
- * �������� :	  �ͷż�¼���е�������Դ����̬������ڴ棩
- *                �ر�˵������¼���е��ڴ�����������漸������·���ģ�
- *                1����¼���е��ڴ��������� sql_execute �����з���ģ�
- *                2���ڵ��� get_record ��ʱ���п��ܻ�����ڴ棨��ʵ�ַ�ʽ�йأ�
- *                3���ڵ��� record_to_string ��ʱ�������ڴ棬ҲҪ��������
+ * 功能描述 :	  释放记录集中的所有资源（动态分配的内存）
+ *                特别说明，记录集中的内存可能是在下面几种情况下分配的：
+ *                1、记录集中的内存主体是在 sql_execute 函数中分配的；
+ *                2、在调用 get_record 的时候有可能会分配内存（跟实现方式有关）
+ *                3、在调用 record_to_string 的时候会分配内存，也要管理起来
  *
- * ����:		  [IN] ��¼��
+ * 输入:		  [IN] 记录集
  *
- * ���:		  �����
+ * 输出:		  无输出
  *
- * ����:		  ���ô˽ӿں�rs �е��ڴ�ᱻ�ͷ���ϣ����rs��ֵΪNULL
+ * 返回:		  调用此接口后，rs 中的内存会被释放完毕，最后rs的值为NULL
 ******************************************************************************/
 
 void rm_recordset(RecordSet& rs)
@@ -609,24 +610,24 @@ void rm_recordset(RecordSet& rs)
 	return;
 }
 /******************************************************************************
- * �������� :	  ����¼ת�����ַ����������Ϳ��Ա���У����
- *                �����¼�����������
- *                (1) CREATE TABLE/DROP TABLE/INSERT INTO ��䷵�صĽ��
- *                    ������ʾ��Ϣ���൱�ڽ��ֻ��һ�У���text�����ַ���
- *                    ���磺CREATE TABLE SUCCESS
- *                (2) SELECT��䷵�صĽ��
- *                    ���ֵ֮����Ӣ�Ķ���','�ָ����Ҷ��ź�����һ���ո񣬾�����
+ * 功能描述 :	  将记录转换成字符串，这样就可以便于校验结果
+ *                结果记录有两种情况：
+ *                (1) CREATE TABLE/DROP TABLE/INSERT INTO 语句返回的结果
+ *                    都是提示信息，相当于结果只有一列，是text类型字符串
+ *                    例如：CREATE TABLE SUCCESS
+ *                (2) SELECT语句返回的结果
+ *                    多个值之间用英文逗号','分隔，且逗号后留有一个空格，举例：
  *                    100, 'Bananas'
  *                    200, 'Apple'
- *                    �ر�ע�⣺text���͵�ֵ����Ҫ��Ӣ�ĵ�����������������
+ *                    特别注意：text类型的值，需要加英文单引号括起来，如上
  *
- * ����  :		  [IN] ��¼
+ * 输入  :		  [IN] 记录
  *
- * ���  :		  �������
+ * 输出  :		  无输出。
  *
- * ����  :		  ��¼ת�ɵ��ַ���
- *				  �ر�˵�������ص��ַ������ڴ���Ȼ��SQL����������ں���rm_recordset
- *				  ��һͬ�ͷ�
+ * 返回  :		  记录转成的字符串
+ *				  特别说明：返回的字符串的内存仍然由SQL引擎管理，在函数rm_recordset
+ *				  中一同释放
 ******************************************************************************/
 char* record_to_string(const Record rcd)
 {
