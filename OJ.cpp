@@ -150,22 +150,27 @@ int str_len(const char* var){
 	return len;
 }
 void free_table(struct Table* in){
-	struct element* temp = in->index;
+	struct element* temp;
+	if(in == 0)return;
+	temp= in->index;
 	while(temp!=0){
 		in->index = temp->next;
 		free_element(temp);
 		temp = in->index;
 	}
+	
 	free_column(in->col);
-	free(in->name);
+	if(in->name != 0) free(in->name);
 	free(in);
 }
 void free_element(struct element* in){
-	free(in->content);
+	if(in == 0)return ;
+	if(in->content != 0)free(in->content);
 	free(in);
 }
 void free_column(struct column* in){
-	free(in->name);
+	if(in == 0)return;
+	if(in->name != 0)free(in->name);
 	free(in);
 }
 void sort(struct element** in,int i,int type){
@@ -476,13 +481,34 @@ RecordSet create_execute(const char *sql){
 
 	/*******column的type获取******/
 	if(*sql == 'i'){
-		if(!str_compare_ignore_case("integer",sql,7)){free_table(table);  return result;} //类型不对，错误返回
+		if(!str_compare_ignore_case("integer",sql,7)){
+			free_table(table); 
+			temp = sub_str(sql," ,",2);
+			memcpy(result->result,"Type:'",6);
+			memcpy(result->result+6+temp,"' is not supported",19);
+			temp--;
+			while(temp >= 0){
+			   *(result->result + 6 + temp) = *(sql + temp); 
+			}
+			return result;
+		} //类型不对，错误返回
 		sql += 7;
 		table->col[table->col_size].type = 0;
 		table->col_size++;
 	}
 	else{
-		if(!str_compare_ignore_case("text",sql,4)) { free_table(table); return result; }
+		if(!str_compare_ignore_case("text",sql,4)) { 
+				free_table(table); 
+				temp = sub_str(sql," ,",2);
+				memcpy(result->result,"Type:'",6);
+				memcpy(result->result+6+temp,"' is not supported",19);
+				temp--;
+				while(temp >= 0){
+				  *(result->result + 6 + temp) = *(sql + temp); 
+				  temp--;
+				}
+				return result;
+		}
 		sql += 4;
 		table->col[table->col_size].type = 1;
 		table->col_size++;
@@ -630,22 +656,22 @@ RecordSet insert_execute(const char *sql){
 	for(i=0;i<table->col_size-1;i++){
 		while(*sql == ' ') sql++;                             //清除多余的空格
 		temp = sub_str(sql," ,",2);                           //一个值得后面要么是 空格，要么是 逗号
-		if(temp==-1)return result;                            //如果取值失败
+		if(temp==-1){ free_element(element); return result; } //如果取值失败
 		/**********根据值的具体类型，来判断字符串是转换为数字，还是单纯的字符串********/
-			if(table->col[i].type==0){
+		if(table->col[i].type==0){
 				memcpy(cache,sql,temp);
 				*(cache + temp + 1) = 0;
 				sscanf_num = sscanf(cache,"%d",&(element->content[i]));
 				if(sscanf_num!=1){ free_element(element); return result; } //数字不纯正，失败
 				sql += temp;
-			}
-			else{
+		}
+		else{
 				element->content[i] = (int)malloc(sizeof(char)*temp);
 				if(*sql !='\'' || *(sql+temp-1) != '\''){ free_element(element); return result; } //字符串的前后必须都是单引号
 				memcpy((char*)(element->content[i]),sql+1,temp-2);
 				*((char*)(element->content[i])+temp-2) = 0;
 				sql += temp;
-			}
+		}
 		/**********根据值的具体类型，来判断字符串是转换为数字，还是单纯的字符串********/
 		while(*sql == ' ') sql++;                                 //清除多余的空格
 		if(*sql != ','){ free_element(element); return result; }  //值的后面必有一个 逗号，否则语法错误
@@ -911,6 +937,7 @@ Record get_record(const RecordSet rs, int index)
 	while(index>=0){
 		if(temp == 0){
 			result->error = 1;
+			result->result[0]=0;
 			return result;
 		}
 		index--;
@@ -919,6 +946,11 @@ Record get_record(const RecordSet rs, int index)
 	if(temp==0){
 		result->error = 1;
 		return result;
+	}
+	if(temp == 0){
+			result->error = 1;
+			result->result[0]=0;
+			return result;
 	}
 	result->error = 0;
 	memcpy(result->result,temp->result,1024);
